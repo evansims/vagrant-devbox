@@ -114,6 +114,11 @@ class main {
     }
 }
 
+class {
+  'memcached':
+    max_memory => '10%'
+}
+
 class { 'apt': }
 
 include system-update
