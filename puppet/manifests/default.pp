@@ -2,136 +2,136 @@
 
 Exec { path => [ "/bin/", "/sbin/" , "/usr/bin/", "/usr/sbin/" ] }
 
-class system-update {
+class dbx-setup-apt {
 
-    file { "/etc/apt/sources.list.d/dotdeb.list":
-        owner  => root,
-        group  => root,
-        mode   => 664,
-        source => "/vagrant/conf/apt/dotdeb.list",
-    }
+	include apt
 
-    exec { 'dotdeb-apt-key':
-        cwd     => '/tmp',
-        command => "wget http://www.dotdeb.org/dotdeb.gpg -O dotdeb.gpg &&
-                    cat dotdeb.gpg | apt-key add -",
-        unless  => 'apt-key list | grep dotdeb',
-        require => File['/etc/apt/sources.list.d/dotdeb.list'],
-        notify  => Exec['apt_update'],
-    }
+	file { "/etc/apt/sources.list.d/dotdeb.list":
+		owner  => root,
+		group  => root,
+		mode   => 664,
+		source => "/vagrant/conf/apt/dotdeb.list",
+	}
 
-  exec { 'apt-get update':
-    command => 'apt-get update',
-  }
+	exec { 'dotdeb-apt-key':
+		cwd     => '/tmp',
+		command => "wget http://www.dotdeb.org/dotdeb.gpg -O dotdeb.gpg &&
+								cat dotdeb.gpg | apt-key add -",
+		unless  => 'apt-key list | grep dotdeb',
+		require => File['/etc/apt/sources.list.d/dotdeb.list'],
+		notify  => Exec['apt_update'],
+	}
 
-  $sysPackages = [ "build-essential" ]
-  package { $sysPackages:
-    ensure => "installed",
-    require => Exec['apt-get update'],
-  }
+	exec { 'apt-get update':
+		command => 'apt-get update',
+	}
+
+	package { [ "build-essential" ]:
+		ensure  => "installed",
+		require => Exec['apt-get update'],
+	}
 }
 
-class nginx-setup {
+class dbx-setup-toolbox {
 
-  include nginx
+	package { [ "htop", "curl", "git", "nodejs", "rubygems" ]:
+		ensure  => "installed",
+		require => Exec['apt-get update'],
+	}
 
-  file { "/etc/nginx/sites-available/php-fpm":
-    owner  => root,
-    group  => root,
-    mode   => 664,
-    source => "/vagrant/conf/nginx/default",
-    require => Package["nginx"],
-    notify => Service["nginx"],
-  }
+	package { [ "npm" ]:
+		ensure  => "installed",
+		require => Package['nodejs'],
+	}
 
-  file { "/etc/nginx/sites-enabled/default":
-    owner  => root,
-    ensure => link,
-    target => "/etc/nginx/sites-available/php-fpm",
-    require => Package["nginx"],
-    notify => Service["nginx"],
-  }
+	exec { 'gem install sass':
+		command => 'gem install sass',
+		require => Package['rubygems'],
+	}
 }
 
-class development {
+class dbx-setup-databases {
 
-  $devPackages = [ "curl", "git", "nodejs", "npm", "rubygems" ]
-  package { $devPackages:
-    ensure => "installed",
-    require => Exec['apt-get update'],
-  }
+	class { 'mysql':
+		root_password => 'root',
+	}
+
+	class { 'mongodb':
+		enable_10gen => true,
+	}
 }
 
-class main {
+class dbx-setup-memcached {
 
-    php::module { [ 'curl', 'gd', 'mcrypt', 'memcached', 'mysql' 'imap', ]:
-        notify => Class['php::fpm::service'],
-    }
-
-    php::module { [ 'memcache', 'apc', ]:
-        notify => Class['php::fpm::service'],
-        source  => '/etc/php5/conf.d/',
-    }
-
-    php::module { [ 'suhosin', ]:
-        notify  => Class['php::fpm::service'],
-        source  => '/vagrant/conf/php/',
-    }
-
-    exec { 'pecl-mongo-install':
-        command => 'pecl install mongo',
-        unless => "pecl info mongo",
-        notify => Class['php::fpm::service'],
-    }
-
-    exec { 'pecl-xhprof-install':
-        command => 'pecl install xhprof',
-        unless => "pecl info xhprof",
-        notify => Class['php::fpm::service'],
-    }
-
-    php::conf { [ 'mysqli', 'pdo', 'pdo_mysql', ]:
-        require => Package['php-mysql'],
-        notify  => Class['php::fpm::service'],
-    }
-
-    file { "/etc/php5/conf.d/custom.ini":
-        owner  => root,
-        group  => root,
-        mode   => 664,
-        source => "/vagrant/conf/php/custom.ini",
-        notify => Class['php::fpm::service'],
-    }
-
-    include php::fpm
-
-    file { "/etc/php5/fpm/pool.d/www.conf":
-        owner  => root,
-        group  => root,
-        mode   => 664,
-        source => "/vagrant/conf/php/php-fpm/www.conf",
-        notify => Class['php::fpm::service'],
-    }
+	class { 'memcached':
+		max_memory => '10%',
+		logfile    => '/vagrant/logs/memcached.log',
+	}
 }
 
-class {
-  'memcached':
-    max_memory => '10%'
+class dbx-setup-php {
+	
+	include php::fpm
+	include pear
+
+	php::module { [ 'curl', 'gd', 'mcrypt', 'memcached', 'mysql', 'imap' ]:
+		notify => Class['php::fpm::service'],
+	}
+
+	exec { 'pecl-mongo-install':
+		command => 'pecl install mongo',
+		unless  => "pecl info mongo",
+		require => Class['pear'],
+		notify  => Class['php::fpm::service'],
+	}
+
+	php::conf { [ 'mysqli', 'pdo', 'pdo_mysql' ]:
+		require => Package['php-mysql'],
+		notify  => Class['php::fpm::service'],
+	}
+
+	file { "/etc/php5/conf.d/custom.ini":
+		owner  => root,
+		group  => root,
+		mode   => 664,
+		source => "/vagrant/conf/php/custom.ini",
+		notify => Class['php::fpm::service'],
+	}
+
+	file { "/etc/php5/fpm/pool.d/www.conf":
+		owner  => root,
+		group  => root,
+		mode   => 664,
+		source => "/vagrant/conf/php/php-fpm/www.conf",
+		notify => Class['php::fpm::service'],
+	}
 }
 
-class { 'apt': }
+class dbx-setup-nginx {
 
-include system-update
+	include nginx
 
-include php::fpm
-include main
+	file { "/etc/nginx/sites-available/php-fpm":
+		owner   => root,
+		group   => root,
+		mode    => 664,
+		source  => "/vagrant/conf/nginx/default",
+		require => Package["nginx"],
+		notify  => Service["nginx"],
+	}
 
-include nginx-setup
-include apache
-include mysql
-
-class {'mongodb':
-  enable_10gen => true,
+	file { "/etc/nginx/sites-enabled/default":
+		owner   => root,
+		ensure  => link,
+		target  => "/etc/nginx/sites-available/php-fpm",
+		require => Package["nginx"],
+		notify  => Service["nginx"],
+	}
 }
 
-include development
+include dbx-setup-apt
+include dbx-setup-toolbox
+include dbx-setup-databases
+include dbx-setup-memcached
+include dbx-setup-php
+include dbx-setup-nginx

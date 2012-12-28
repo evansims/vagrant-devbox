@@ -18,7 +18,5 @@ Vagrant::Config.run do |config|
   config.vm.customize [
     "setextradata", :id,
     "VBoxInternal2/SharedFoldersEnableSymlinksCreate/v-root", "1",
-    "modifyvm", :id,
-    "--memory", 1024
   ]
 end
