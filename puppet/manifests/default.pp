@@ -15,8 +15,7 @@ class dbx-setup-apt {
 
 	exec { 'dotdeb-apt-key':
 		cwd     => '/tmp',
-		command => "wget http://www.dotdeb.org/dotdeb.gpg -O dotdeb.gpg &&
-								cat dotdeb.gpg | apt-key add -",
+		command => "wget http://www.dotdeb.org/dotdeb.gpg -O dotdeb.gpg && cat dotdeb.gpg | apt-key add -",
 		unless  => 'apt-key list | grep dotdeb',
 		require => File['/etc/apt/sources.list.d/dotdeb.list'],
 		notify  => Exec['apt_update'],
@@ -64,7 +63,7 @@ class dbx-setup-databases {
 class dbx-setup-memcached {
 
 	class { 'memcached':
-		max_memory => '10%',
+		max_memory => '15%',
 		logfile    => '/vagrant/logs/memcached.log',
 	}
 }
